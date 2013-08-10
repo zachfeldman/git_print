@@ -5,11 +5,16 @@ require "bundler/setup"
 require "active_record"
 require 'appscript'
 require 'yaml'
+require 'twilo-ruby'
 require './models'
 
 ActiveRecord::Base.establish_connection "sqlite3:///git_print.sqlite3"
+@client = Twilio::REST::Client.new(@twilio_sid, @twilo_auth_token)
 
 settings = YAML.load_file(File.open('git_print.yml'))
+
+@twilo_sid = ENV['TWILO_ACCOUNT_SID']
+@twilo_auth_token = ENV['TWILO_AUTH_TOKEN']
 
 def print_label(line_one, line_two, line_three, line_four)
   dymo = Appscript.app("DYMO Label")
@@ -51,6 +56,34 @@ def print_latest(settings, first_run)
   #print_latest(settings, false)
 end
 
+def text_latest(settings, first_run)
+  puts "git_print is running..." unless first_run == false
+  issues = github_query(settings)
+  unless issues.nil?
+    issues.body.each do |issue|
+      number_milestone = "##{issue.number} #{('MS-'+ issue.milestone.title) if !issue.milestone.nil? && !issue.milestone.title.nil?}"
+      begin
+        db_issue = Issue.where(:number => issue.number).first
+        if db_issue.updated_at.in_time_zone(-5) < issue.updated_at.in_time_zone(-5)
+          @account = @client.account
+          @messsage = @account.sms.messages.create({:from => ENV['TWILO_NUMBER'], :to => ENV['RECIPIANT_NUMBER'], :body => "TO: "+issue.assignee.login, number_milestone, issue.title, Chronic.parse(issue.updated_at).in_time_zone(-5).strftime("%m/%d/%Y at%l:%M %p"))}) unless first_run
+          db_issue.updated_at = issue.updated_at.in_time_zone(-5)
+          db_issue.save
+        end
+      rescue
+          @account = @client.account
+          @messsage = @account.sms.messages.create({:from => ENV['TWILO_NUMBER'], :to => ENV['RECIPIANT_NUMBER'], :body => "TO: "+issue.assignee.login, number_milestone, issue.title, Chronic.parse(issue.updated_at).in_time_zone(-5).strftime("%m/%d/%Y at%l:%M %p")})) unless first_run        Issue.create(number: issue.number, title: issue.title, body: issue.body, updated_at: Chronic.parse(issue.updated_at))
+      end
+    end
+    puts "github fetch complete"
+  else
+    puts "github fetch empty"
+  end
+  #sleep(10)
+  #print_latest(settings, false)
+end
+  
+
 def github_query(settings)
   begin
     github = Github.new login: ENV['GITHUB_USERNAME'], password: ENV['GITHUB_PASSWORD']
@@ -62,6 +95,7 @@ def github_query(settings)
   issues
 end
 
-print_latest(settings, true)
+#print_latest(settings, true)
+text_latest(settings, true)
 
 

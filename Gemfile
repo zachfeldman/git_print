@@ -7,3 +7,4 @@ gem "activerecord"
 gem 'sinatra'
 gem 'rake'
 gem "rb-appscript"
+gem "twillo-ruby"
