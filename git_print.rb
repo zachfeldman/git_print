@@ -8,8 +8,8 @@ require 'yaml'
 require 'twilio-ruby'
 require './models'
 
-twilio_sid = ENV['TWILO_ACCOUNT_SID']
-twilio_auth_token = ENV['TWILO_AUTH_TOKEN']
+twilio_sid = ENV['TWILIO_ACCOUNT_SID']
+twilio_auth_token = ENV['TWILIO_AUTH_TOKEN']
 
 ActiveRecord::Base.establish_connection "sqlite3:///git_print.sqlite3"
 
@@ -64,7 +64,7 @@ def text_issue(settings)
     issues.body.each do |issue|
       number_milestone = "##{issue.number} #{('MS-'+ issue.milestone.title) if !issue.milestone.nil? && !issue.milestone.title.nil?}"
       @client.account.sms.messages.create({
-        :from => ENV['TWILO_NUMBER'],
+        :from => ENV['TWILIO_NUMBER'],
         :to =>   ENV['RECIPIANT_NUMBER'],
         :body => "TO: #{issue.assignee.login} #{number_milestone} #{issue.title} #{Chronic.parse(issue.updated_at).in_time_zone(-5).strftime("%m/%d/%Y at%l:%M %p")}" 
       })
