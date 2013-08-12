@@ -1,8 +1,8 @@
 require 'rubygems'
 require 'github_api'
 require 'chronic'
-require "bundler/setup"
-require "active_record"
+require 'bundler/setup'
+require 'sinatra/activerecord'
 require 'appscript'
 require 'yaml'
 require 'twilio-ruby'
@@ -13,7 +13,7 @@ twilio_auth_token = ENV['TWILO_AUTH_TOKEN']
 
 ActiveRecord::Base.establish_connection "sqlite3:///git_print.sqlite3"
 
-client = Twilio::REST::Client.new(twilio_sid.to_s.strip, twilio_auth_token.to_s.strip)
+@client = Twilio::REST::Client.new(twilio_sid.to_s.strip, twilio_auth_token.to_s.strip)
 
 settings = YAML.load_file(File.open('git_print.yml'))
 
@@ -58,6 +58,19 @@ def print_latest(settings, first_run)
   #print_latest(settings, false)
 end
 
+def text_issue(settings)
+  issues = github_query(settings)
+   unless issues.nil?
+    issues.body.each do |issue|
+      number_milestone = "##{issue.number} #{('MS-'+ issue.milestone.title) if !issue.milestone.nil? && !issue.milestone.title.nil?}"
+      @client.account.sms.messages.create({
+        :from => ENV['TWILO_NUMBER'],
+        :to =>   ENV['RECIPIANT_NUMBER'],
+        :body => "TO: #{issue.assignee.login} #{number_milestone} #{issue.title} #{Chronic.parse(issue.updated_at).in_time_zone(-5).strftime("%m/%d/%Y at%l:%M %p")}" 
+      })
+    end
+  end
+end
 
 def text_latest(settings, first_run)
   puts "git_print is running..." unless first_run == false
@@ -68,16 +81,12 @@ def text_latest(settings, first_run)
       begin
         db_issue = Issue.where(:number => issue.number).first
         if db_issue.updated_at.in_time_zone(-5) < issue.updated_at.in_time_zone(-5)
-          client.account.sms.messages.create({
-              :from => ENV['TWILO_NUMBER'],
-              :to =>   ENV['RECIPIANT_NUMBER'],
-              :body => "TO: #{issue.assignee.login} #{number_milestone} #{issue.title} #{Chronic.parse(issue.updated_at).in_time_zone(-5).strftime("%m/%d/%Y at%l:%M %p")}" 
-              })
+          text_issue(settings) unless first_run
           db_issue.updated_at = issue.updated_at.in_time_zone(-5)
           db_issue.save
         end
       rescue
-          text_issue unless first_run
+          text_issue(settings) unless first_run
           Issue.create(number: issue.number, title: issue.title, body: issue.body, updated_at: Chronic.parse(issue.updated_at))
       end
     end
@@ -85,8 +94,8 @@ def text_latest(settings, first_run)
   else
     puts "github fetch empty"
   end
-  #sleep(10)
-  #print_latest(settings, false)
+  sleep(10)
+  text_latest(settings, false)
 end
   
 
@@ -101,7 +110,7 @@ def github_query(settings)
   issues
 end
 
-print_latest(settings, true)
+#print_latest(settings, true)
 text_latest(settings, true)
 
 
